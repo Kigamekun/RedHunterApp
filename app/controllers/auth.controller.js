@@ -20,7 +20,6 @@ exports.findAll = (req, res) => {
 
 exports.login = async (req, res) => {
     body = req.body;
-
     var data = await userService.findUser(body.email, body.password);
     if (data !== null) {
         const match = await bcrypt.compare(body.password, data['password']);
@@ -32,19 +31,23 @@ exports.login = async (req, res) => {
             const userId = data['id'];
             const name = data['name'];
             const email = data['email'];
-
-            const accessToken = jwt.sign({userId, name,email}, process.env.ACCESS_TOKEN_SECRET,{
+            const accessToken = jwt.sign({ userId, name, email }, process.env.ACCESS_TOKEN_SECRET, {
                 expiresIn: '20s'
             });
-            const refreshToken = jwt.sign({userId, name,email}, process.env.REFRESH_TOKEN_SECRET,{
+            const refreshToken = jwt.sign({ userId, name, email }, process.env.REFRESH_TOKEN_SECRET, {
                 expiresIn: '1d'
             });
 
-            return res.status(200).send({
-                message: 'Login successful',
-                data:data,
-                accessToken: accessToken,
-            })
+            const up = User.findOneAndUpdate({ email: body.email }, { access_token: accessToken }, function (err, doc) {
+                if (err) return res.send(500, { error: err });
+                data['access_token'] = accessToken;
+                return res.status(200).send({
+                    message: 'Thanks Login Successfully !',
+                    data: data,
+                    accessToken: accessToken,
+                })
+            });
+
         }
     } else {
         res.status(401).json({ message: "Email Not Found" });
@@ -61,8 +64,10 @@ exports.register = async (req, res) => {
         role: 1,
         email_verified_at: Date('Y-m-d'),
         password: body.password,
+        access_token:null,
+        
     }).then((result) => {
-        res.send({message:'Successfully Registered', body: result});
+        res.send({ message: 'Successfully Registered', body: result });
     }).catch((err) => {
         res.status(500).send({
             message: err.message || 'Something went wrong'
@@ -70,21 +75,9 @@ exports.register = async (req, res) => {
     });
 }
 
-exports.logout = async(req, res) => {
-    const refreshToken = req.cookies.refreshToken;
-    if(!refreshToken) return res.sendStatus(204);
-    const user = await Users.findAll({
-        where:{
-            refresh_token: refreshToken
-        }
-    });
-    if(!user[0]) return res.sendStatus(204);
-    const userId = user[0].id;
-    await Users.update({refresh_token: null},{
-        where:{
-            id: userId
-        }
-    });
-    res.clearCookie('refreshToken');
-    return res.sendStatus(200);
+exports.logout = async (req, res) => {
+    const params = req.query
+    User.findOneAndUpdate({access_token:params.token},{access_token:null},function () {
+        res.send({'message':'Successfully logout thanks for using this app'})
+    })
 }
